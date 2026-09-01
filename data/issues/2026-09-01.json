@@ -2,66 +2,127 @@
   "date": "2026-09-01",
   "label": "01 Sep 2026",
   "summary": [
+    "CAKE co-designs an agent-facing, hardware-explicit schedule IR with verification and deterministic CUDA/PTX lowering; on B200 its clean-start Flash-KMeans search reaches 1.144× the tuned FlashML baseline versus 0.928× for direct CUDA/PTX.",
+    "OasisKV uses speculative lookahead tokens to prefetch a sparse KV working set from host or remote memory, delivering up to 2.1× dense long-context throughput and 2.1–2.3× under prefill/decode disaggregation with small average accuracy loss.",
+    "At 65K context, llama.cpp's XOR-swizzled K/V shared-memory layout improves reported DGX Spark token generation by 2.9–6.4% across several models while keeping a padded fallback for unsupported strides.",
+    "Blackwell kernel work remains highly shape-specific: vLLM replaces Triton with a native CUDA AttnRes path for Kimi-K3, while FlashInfer moves SM100 block-sparse attention to a zero-copy CuTe DSL implementation.",
     "Blackwell specialization is producing strong kernel-level gains: vLLM's native Kimi-K3 AttnRes path is 1.20–1.49× faster than Triton for measured small batches and up to 1.72× at 8K tokens on B300.",
-    "State movement is a first-class speculative-decoding cost: SGLang removes the all-layer KDA state commit and cuts the measured verify-plus-commit seam by 44.5–62.5% on B200.",
-    "ROCm MLA context parallelism now handles causal multi-token verification for Kimi-K3 with FP8 KV and full graph capture, closing a key correctness gap for DCP speculative serving.",
+    "Energy-per-token is not a fixed model property. New H100/H200 measurements show that batch, context, output length, runtime, and MoE routing can move energy efficiency by orders of magnitude.",
+    "Memory correctness is part of throughput engineering: SGLang now sizes unified hybrid-model pools from bytes, detects impossible single-request configurations at boot, and verifies allocator conservation.",
     "Microkernel wins still require end-to-end skepticism: FlashInfer's Cake KDA kernels lead several isolated Blackwell tests, yet the reported 8×B200 serving audit remains 8.57% behind FLA throughput.",
-    "At 65K context, llama.cpp's XOR-swizzled K/V shared-memory layout improves reported DGX Spark token generation by 2.9–6.4% across several models while keeping a padded fallback for unsupported strides."
+    "No qualifying new OpenReview decision or major official engineering article passed the same 24-hour, primary-source, and technical-substance gates.",
+    "Parser state is becoming a useful memory-management signal: PASK turns constrained-decoding transitions into layer-specific KV persistence and reports materially better BFCL accuracy at a one-third KV budget.",
+    "ROCm MLA context parallelism now handles causal multi-token verification for Kimi-K3 with FP8 KV and full graph capture, closing a key correctness gap for DCP speculative serving.",
+    "State movement is a first-class speculative-decoding cost: SGLang removes the all-layer KDA state commit and cuts the measured verify-plus-commit seam by 44.5–62.5% on B200."
   ],
   "items": [
     {
-      "canonical_url": "https://github.com/vllm-project/vllm/pull/54261",
-      "title": "vLLM: Native CUDA Kimi-K3 AttnRes becomes the SM100 default",
-      "venue_source": "vLLM pull request #54261 · merged",
-      "date": "2026-08-31",
-      "tag": "Blackwell · Kimi-K3",
-      "one_sentence_takeaway": "A register/TMEM CUDA kernel now covers the full dense Kimi-K3 AttnRes contract on SM100, reporting 1.20–1.49× speedups over Triton for measured small batches and 1.72× at 8K tokens on B300.",
-      "problem": "Kimi-K3 AttnRes combines residual blocks, optional prefix and delta updates, normalization, and block-bank writes; incomplete native coverage left several common SM100 shapes on a more general Triton path.",
-      "why_it_matters": "AttnRes runs repeatedly inside Kimi-K3 decode and prefill. Microseconds saved at small decode batches reduce TPOT, while faster large-token execution improves prompt and verification throughput.",
-      "existing_approaches": "The Triton implementation supported the full operation contract and served as the fallback. The earlier CUDA kernel covered only a narrower set of block counts and fused variants.",
-      "limitations": "The default route is limited to dense hidden-size-7168 inputs on SM100-family GPUs. The published performance table is kernel-level; full-model evaluation establishes accuracy but does not isolate end-to-end throughput gain.",
-      "proposed_solution": "Extend the register/TMEM kernel to 0–8 block rows, optional prefix, output normalization, and block writes; specialize away unused normalization work and delay the programmatic-dependency wait until the first producer-dependent TMA.",
-      "key_differences": "The native path now covers the complete common contract and becomes the default on supported Blackwell shapes, while Triton remains an explicit fallback for unsupported devices or non-dense layouts.",
-      "results_with_conditions": "NVIDIA B300 SXM6 AC, PyTorch 2.13.0, CUDA 13.0, median kernel time. At one token: 1 block 10.24→8.19 µs (1.25×), 4 blocks 12.29→8.22 µs (1.49×), 8 blocks 14.34→10.24 µs (1.40×); zero blocks tied at 8.19 µs. At 8 blocks, 4,096 tokens 204.77→122.88 µs (1.67×) and 8,192 tokens 395.30→229.44 µs (1.72×). Full Kimi-K3 MXFP4 evaluation on GB300 reported no accuracy regression across five topologies/configurations.",
-      "assessment": "High-value, well-benchmarked Blackwell kernel work. Worth reproducing for Kimi-K3 deployments, but operators should measure model-level TPOT and throughput because the PR reports kernel speedups rather than a serving A/B.",
-      "citations": [{"label": "Merged PR, kernel benchmark, and model evaluation", "url": "https://github.com/vllm-project/vllm/pull/54261"}],
-      "content_hash": "vllm-pr-54261-merged-native-sm100-attnres"
+      "canonical_url": "https://arxiv.org/abs/2608.12629",
+      "title": "CAKE: Compiler–Agent Co-Design for Frontier Kernel Evolution",
+      "venue_source": "arXiv:2608.12629v1 · NVIDIA, CMU, and University of Washington",
+      "date": "2026-08-12",
+      "tag": "Agentic compiler · GPU kernels",
+      "one_sentence_takeaway": "CAKE gives kernel agents a typed, hardware-explicit schedule IR plus localized compiler feedback, enabling generated Blackwell kernels to match or exceed expert baselines more reliably than direct CUDA/PTX search.",
+      "problem": "Kernel agents normally treat the compiler as a black box and receive only compilation errors, correctness outcomes, and timing. Direct CUDA/PTX exposes a large brittle search space, while tile-level DSLs hide warp specialization, synchronization, pipeline, and memory-placement decisions that distinguish frontier kernels.",
+      "why_it_matters": "New attention, recurrent, MoE, and quantized operators appear faster than experts can hand-tune complete kernel portfolios. An agent needs both low-level scheduling control and diagnostics that identify which resource, role, barrier, or stage caused an illegal or slow candidate.",
+      "existing_approaches": "Triton, TileLang, and cuTile simplify tiled computation but hide important machine schedules; CuTe exposes fine control through demanding layout algebra. Existing kernel agents typically mutate raw CUDA or DSL source and rely on pass/fail tests and end-to-end timings.",
+      "limitations": "The controlled clean-start experiment covers one fixed Flash-KMeans shape with three runs per representation and an 80-million-token budget. Most detailed measurements are on B200, several production examples start from existing kernels, and the static verifier can still have false positives and false negatives.",
+      "proposed_solution": "Agents author Cake IR schedules that explicitly declare compute and memory operations, SMEM/TMEM resources, warp roles, barriers, and pipelines. The harness performs typed construction, safety and hardware checks, numerical validation, cost-model ranking, and localized diagnostics before deterministically lowering accepted schedules to inspectable CUDA/PTX and the standard NVIDIA toolchain.",
+      "key_differences": "Performance-relevant choices remain explicit, but mechanical metadata such as barrier addresses and phase bits, TMEM offsets, descriptor encodings, and warp identity are compiler-derived. Repeated failures can also evolve the verifier, IR vocabulary, calibration, and reusable optimization tactics.",
+      "results_with_conditions": "Matched implementation-hidden Flash-KMeans clean starts on B200, three runs per representation, 80M provider-token budget: Cake IR reached a median 1.144× the tuned 0.938 ms FlashML baseline, plateaued in 3/3 runs, and used 1.89 h median active evolution time; direct CUDA/PTX reached 0.928×, plateaued in 0/3, and used 3.73 h. Agent-generated Kimi Delta Attention prefill achieved a 2.05× geometric-mean speedup over official FlashKDA across six B200 BF16 shapes and passed Kimi-K3/SGLang serving validation. Dispatcher-backed KNN build, KNN search, and KMeans achieved 1.418×, 2.116×, and 1.803× geometric means across 112, 198, and 124 shapes.",
+      "assessment": "A high-impact AI-for-systems paper because it argues that expert kernel agents require an analyzable schedule representation and evolving compiler harness, not only a stronger model. The results are promising but expensive and B200-heavy; broader clean-start tasks and cross-architecture portfolio tests are needed.",
+      "citations": [
+        {
+          "label": "Canonical paper",
+          "url": "https://arxiv.org/abs/2608.12629"
+        },
+        {
+          "label": "HTML method, lowering, and evaluation",
+          "url": "https://arxiv.org/html/2608.12629v1"
+        }
+      ],
+      "content_hash": "arxiv-2608.12629-v1"
     },
     {
-      "canonical_url": "https://github.com/sgl-project/sglang/pull/33722",
-      "title": "SGLang: Fused-accept state advance for FlashInfer KDA MTP verification",
-      "venue_source": "SGLang pull request #33722 · merged",
-      "date": "2026-08-31",
-      "tag": "Speculative · Recurrent state",
-      "one_sentence_takeaway": "Keeping accepted KDA checkpoints in speculative scratch removes the all-layer SSM commit scatter and cuts the measured verify-plus-commit seam by 44.5–62.5% across batch sizes 1–16 on B200.",
-      "problem": "Each KDA MTP round wrote every draft token's post-state to scratch, scattered the accepted checkpoint back to the persistent pool across all KDA layers, then re-read it as the next round's seed.",
-      "why_it_matters": "For Kimi-Linear-48B shapes, one recurrent state is roughly 4 MB per layer per request. Rewriting it across 20 layers adds memory traffic, launches, and host dispatch precisely in the batch-size-one speculative inter-phase seam.",
-      "existing_approaches": "The legacy path performed a committed-pool seed copy plus a full all-layer SSM state scatter after every verify. FlashInfer already exposed num_accepted_tokens for in-kernel seeding, but SGLang did not pass it.",
-      "limitations": "The feature is off by default, requires the FlashInfer KDA backend and disabled radix cache, and is mutually exclusive with linear ReplaySSM speculation. The convolution rollback remains separate, and Kimi-K3 DSpark support is future work.",
-      "proposed_solution": "Index scratch by stable request slots, stage fresh requests once, persist per-slot acceptance lengths, and let recurrent_kda seed from the previous round's accepted scratch checkpoint; shrink commit to convolution rollback plus a tiny acceptance-length write.",
-      "key_differences": "The accepted state stays where the verify kernel produced it instead of round-tripping through persistent storage. Index construction is also hoisted and shared across layers while remaining CUDA-graph safe.",
-      "results_with_conditions": "NVIDIA B200, FlashInfer 0.6.14, Kimi-Linear-48B shapes, 20 KDA layers, HV=32, K=V=128, T=4, BF16 state; 20 verify calls captured in a CUDA graph, commit timed eagerly, minimum of 5×100 iterations. Legacy→fused: batch 1 393.4→218.5 µs (-44.5%), batch 4 720.8→312.3 µs (-56.7%), batch 16 1,967.8→737.8 µs (-62.5%). GPU parity was bit-exact for B=1/8/32 and T=4/6.",
-      "assessment": "A strong example of optimizing state ownership rather than only the recurrent kernel. The measured seam reduction is material, but production value depends on acceptance patterns and on the restrictive cache/backend gates. Worth deep reading for hybrid-model speculative serving.",
-      "citations": [{"label": "Merged PR, state-flow diagram, and timing table", "url": "https://github.com/sgl-project/sglang/pull/33722"}],
-      "content_hash": "sglang-pr-33722-merged-kda-fused-accept"
+      "canonical_url": "https://arxiv.org/abs/2608.08097",
+      "title": "OasisKV: Scaling In-Decode KV Cache Beyond HBM with Lookahead Sparse Prefetching",
+      "venue_source": "arXiv:2608.08097v1 · Imperial, KAIST, Edinburgh, and Microsoft Research",
+      "date": "2026-08-08",
+      "tag": "KV cache · Memory disaggregation",
+      "one_sentence_takeaway": "OasisKV keeps the full KV cache in host or remote memory and uses speculative-decoding draft tokens to predict and asynchronously prefetch an approximately 2K-token per-head HBM working set for the next decode step.",
+      "problem": "Long-context decode is constrained by HBM capacity and KV bandwidth. Sparse attention often leaves the full cache resident on GPU, while on-demand offload retrieval places slow PCIe or network transfers directly on the decode critical path; full KV staging also limits prefill/decode-disaggregated admission and host capacity.",
+      "why_it_matters": "A representative 32B GQA model at a 32.7K context can require about 8.6 GB of KV per request, sharply limiting batch size. Agentic and reasoning workloads combine long histories with long outputs, making in-decode KV residency a direct throughput and infrastructure-cost bottleneck.",
+      "existing_approaches": "Quest-style sparse attention reduces attended tokens but not necessarily HBM capacity. Retrieval systems such as FreeKV keep full KV off-GPU but can miss predictions or fetch on demand; learned prefetchers require model-specific training, and previous training-free predictors often reuse the less accurate previous-step query.",
+      "limitations": "The prototype requires a compatible EAGLE-3/MTP draft component, currently forces draft-token rejection instead of jointly realizing speculative acceptance, and still stores the full KV cache outside HBM. Benefits shrink when model weights dominate KV, some benchmark subsets regress more than the average, and prefix-caching TTFT benefits are analytically modeled rather than implemented.",
+      "proposed_solution": "Fork each speculative draft token into a lightweight background attention path, rank future KV blocks from compressed key summaries, retain already-resident selections, and cap head-wise LRU replacements so transfer fits within one decode step. A new logical mapping layer lets vLLM's paged pool hold different fixed-size block sets per KV head, while remote partial fetching avoids staging the full cache on decode nodes.",
+      "key_differences": "The draft token provides a training-free, one-step-ahead signal that is more accurate than the current query, and prediction, selection, and transfer are pipelined across layers. Placement and prediction are optimized together through a strict per-step fetch cap rather than correcting misses synchronously.",
+      "results_with_conditions": "vLLM prototype on H100s with Qwen3-8B, Qwen3-235B-A22B TP8, and Llama-3.1-8B; default block size 16 and K=128 blocks, about 2,048 selected tokens per KV head. Qwen3-8B at 16K reached 1,398 versus 676 tok/s for dense vLLM, 2.1×, and supported roughly 90–95 concurrent requests versus 22. On AIME24 it reached 2,083 versus 1,235 tok/s, 1.69×, at about 0.1-point accuracy loss. PD-disaggregated throughput improved 2.1–2.3×; admission KV fell 6.5–9.7× and per-request decode-node host memory 2.2–2.6×. Across reasoning tasks it stayed within 0.66 pass@$k$ and 0.35 avg@$k$ points of full attention under the 2K budget.",
+      "assessment": "A strong systems paper because it jointly addresses speculative lookahead, sparse attention, paged KV management, PCIe traffic, and remote disaggregation. Its fetch-cap ablation convincingly shows that off-GPU bandwidth—not sparse attention compute—is the binding constraint, but broader retrieval-heavy workloads and joint speculative acceptance remain important next tests.",
+      "citations": [
+        {
+          "label": "Canonical paper",
+          "url": "https://arxiv.org/abs/2608.08097"
+        },
+        {
+          "label": "HTML system design and evaluation",
+          "url": "https://arxiv.org/html/2608.08097v1"
+        }
+      ],
+      "content_hash": "arxiv-2608.08097-v1"
     },
     {
-      "canonical_url": "https://github.com/vllm-project/vllm/pull/51705",
-      "title": "vLLM: ROCm AITER MLA DCP for causal multi-token verification",
-      "venue_source": "vLLM pull request #51705 · merged",
-      "date": "2026-08-31",
-      "tag": "ROCm · MLA · DCP",
-      "one_sentence_takeaway": "vLLM now gives every speculative verification token the correct rank-local causal KV window under ROCm MLA context parallelism and merges rank-local attention statistics through the existing DCP reduction.",
-      "problem": "Causal multi-token target verification needs a different KV boundary for every verification row and every DCP rank; committed-prefix-only metadata produces incorrect attention windows.",
-      "why_it_matters": "Without correct segmented metadata, Kimi-K3-style speculative serving cannot safely combine ROCm AITER MLA, decode context parallelism, FP8 KV, and full graph capture at long context.",
-      "existing_approaches": "Single-token decode stayed on Gluon/ASM, while multi-token verification lacked a DCP-aware segmented AITER path. Reusing one committed-prefix length for all rows is incorrect once tokens inside the verify block become causally visible.",
-      "limitations": "The change covers the ROCm AITER target backend. Hybrid prefix-cache geometry and external KV connectors remain separate, and the PR provides correctness/evaluation evidence rather than a throughput comparison against a non-DCP baseline.",
-      "proposed_solution": "Compute per-row global causal boundaries, map them to rank-local KV lengths, expand blocks into AITER subpages, run segmented MLA with unreduced partials, and convert/merge base-2 statistics into the existing BF16 output plus natural-log LSE DCP merge.",
-      "key_differences": "Routing ownership moves entirely into the metadata builder, with stable maximum-sized buffers for full graph capture and actual row lengths masking inactive segments during replay.",
-      "results_with_conditions": "Focused ROCm suite: 540 tests passed; an FP8 DCP=2, qlen=3, 96-head causal reference test found the old boundary calculation produced 2,671/147,456 elements outside tolerance, maximum absolute error 0.1311. Full Kimi-K3 target on TP8/DCP8, FP8 KV, 1M max length, batch 32, concurrency 64 completed 1,319 GSM8K samples in 335 s with strict match 0.9613 and no server, traceback, or HSA faults. A stacked two-draft-token run completed in 353 s with mean acceptance length 2.67–2.74.",
-      "assessment": "Important correctness and enablement work for advanced ROCm speculative stacks. Worth deep reading if operating MLA+DCP; performance value remains unquantified because the primary source does not include an end-to-end A/B against the prior execution mode.",
-      "citations": [{"label": "Merged PR, causal-row design, and full-model validation", "url": "https://github.com/vllm-project/vllm/pull/51705"}],
-      "content_hash": "vllm-pr-51705-merged-rocm-mla-dcp-verify"
+      "canonical_url": "https://arxiv.org/abs/2608.28044",
+      "title": "Characterization of Request and Token Energy Costs for LLM Inference Workloads on GPU Platforms",
+      "venue_source": "IISWC 2026 · accepted · arXiv:2608.28044v1",
+      "date": "2026-08-28",
+      "tag": "Energy · Benchmarking",
+      "one_sentence_takeaway": "A controlled H100/H200 study shows that token energy is a request-shape surface—not a model constant—because batching amortizes fixed cost only until context growth and long decode windows make per-step work dominant.",
+      "problem": "Per-token pricing and average power obscure the energy of the complete inference window: output length can reduce joules per token while increasing total request energy, and one-second power samples cannot resolve short GPU phases.",
+      "why_it_matters": "Schedulers, capacity planners, and energy-aware routing need batch-, context-, output-, model-, runtime-, and platform-conditioned costs; optimizing one token-normalized number can raise total energy or violate latency limits.",
+      "existing_approaches": "Prior work often reports average power, energy per token, or isolated kernel efficiency. Those aggregates mix fixed prefill/setup energy with marginal decode-step energy and may miss host/runtime gaps.",
+      "limitations": "The H100 SXM and H200 NVL systems differ in CPU, form factor, memory, peak compute, and TDP, so platform deltas cannot be attributed to one component. Prompts are random tokens, batch is capped at 16, and the evaluated models/runtimes do not cover production request mixes.",
+      "proposed_solution": "Measure synchronized NVML cumulative-energy deltas over complete fixed-shape inference windows, separate a fixed request term from marginal generation-step energy, and use profiler/replay diagnostics to explain host-bound and compute-heavy regimes.",
+      "key_differences": "The study jointly sweeps batch, context, output length, dense versus MoE architecture, runtime, and Hopper platform while reporting request energy and token energy together instead of treating power as a sufficient proxy.",
+      "results_with_conditions": "Single-GPU H100 SXM 80 GB and H200 NVL 141 GB; 10 warmups plus 10 profiled runs; random fixed-length prompts with EOS disabled. On H200, Llama-3.2-1B at batch 16/context 2,048 drops from 2,198 to 386 mJ/token as output grows 10→512, but total window energy rises. At output 10, its batch-16 gain over batch 1 shrinks from 6.31× at context 512 to 1.17× at context 4,096. Long outputs reverse amortization: Llama-3.2-3B at batch 16/context 512 rises from 337 mJ/token at 128 outputs to 1,600 at 8,192. Dense-model H200 token energy is 0.61–0.84× H100 across matched cases; MoE direction depends on shape.",
+      "assessment": "High-value benchmarking and worth deep reading for scheduler or sustainability work. Its main contribution is the shape-dependent model, not a universal H200 advantage; production reproduction should use real traces and matched systems where possible.",
+      "citations": [
+        {
+          "label": "Canonical accepted paper",
+          "url": "https://arxiv.org/abs/2608.28044"
+        },
+        {
+          "label": "HTML methodology and results",
+          "url": "https://arxiv.org/html/2608.28044"
+        }
+      ],
+      "content_hash": "arxiv-2608.28044-v1-iiswc2026"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2608.28276",
+      "title": "Parser States Already Know: Structure-Conditioned KV Persistence for Structured Generation",
+      "venue_source": "arXiv:2608.28276v1 · work in progress",
+      "date": "2026-08-28",
+      "tag": "KV cache · Structured generation",
+      "one_sentence_takeaway": "PASK reuses constrained-decoding parser transitions to decide which generated KV states deserve layer-specific protection, retaining far more function-calling accuracy at roughly one-third of Full-KV cost while cutting measured memory and TPOT.",
+      "problem": "Generic KV compression ranks history by model-side saliency, distortion, or recency, but a numerically modest token can still determine a required field, function, or argument in structured output.",
+      "why_it_matters": "JSON and function-calling workloads fail at the task level when one schema-critical decision changes; preserving parseability alone does not preserve the correct executable action.",
+      "existing_approaches": "H2O, SnapKV, RocketKV, TriAxialKV, and Transactional Attention compress or retain KV using attention, distortion, recency, or coarse structure. They do not use token-level parser transitions to control generated-KV persistence across layers.",
+      "limitations": "PASK requires offline calibration, is evaluated only on BFCL with Qwen3-4B/14B, and currently uses three layer groups and three actions. The paper is a v1 work in progress, and the 32K/256-token A100 case loses throughput despite lower TPOT.",
+      "proposed_solution": "Combine parser-derived token roles with layer groups; use task-error sensitivity to set release/low/high protection floors, attention-output distortion to allocate remaining capacity, and compile the result into a constant-size online lookup policy.",
+      "key_differences": "The policy treats task failure as the mandatory-protection signal and numerical distortion only as the residual-allocation signal, reusing parser state already produced by constrained decoding rather than estimating importance online.",
+      "results_with_conditions": "Qwen3-4B/14B on BFCL with matched constrained decoding and total KV budget about 0.33. Qwen3-4B overall accuracy: 88.00% non-live and 72.01% live versus Full KV at 91.83%/75.22% and strongest compressed baselines at 78.67%/58.57%. Qwen3-4B-Instruct-2507, concurrency 8: at 8K input/1,024 output, A100 TPOT 89.49→43.28 ms and throughput 87.26→173.58 tok/s; L40S 63.45→40.15 ms and 121.67→186.45 tok/s. Peak process memory at a 229,896-token logical capacity fell from about 41,000 MiB to about 21,530 MiB on both GPUs.",
+      "assessment": "The strongest paper today and worth deep reading because it connects parser semantics to a concrete serving control. Reproduction should test other grammars, models, real traffic distributions, calibration cost, and the throughput regression boundary.",
+      "citations": [
+        {
+          "label": "Canonical paper and full benchmark tables",
+          "url": "https://arxiv.org/abs/2608.28276"
+        },
+        {
+          "label": "HTML figures and method details",
+          "url": "https://arxiv.org/html/2608.28276"
+        }
+      ],
+      "content_hash": "arxiv-2608.28276-v1"
     },
     {
       "canonical_url": "https://github.com/flashinfer-ai/flashinfer/pull/4535",
@@ -78,8 +139,36 @@
       "key_differences": "The selector is additive and fail-closed: only exact architecture and shape contracts choose Cake, while bounded, generic, and unsupported layouts retain their qualified paths.",
       "results_with_conditions": "Cold-L2 CUPTI kernel tests: H32 prefill active-union speedup 1.3618× on B200 and 1.3754× on B300; long H4/H8/H16 affine prefill 2.5270×/2.6144× geomean versus direct Cake; decode aggregates lead FLA by 7.47–9.77%. However, one 8×B200 serving audit with 2,048 input / 256 output, concurrency 32 reported 23,125 versus 25,292 tok/s (-8.57%), mean TPOT 8.612 versus 7.717 ms (+11.60%), and an inconclusive paired GSM8K delta of about -1.45 points.",
       "assessment": "Technically rich kernel and selector work with unusually candid negative end-to-end evidence. Worth deep reading and reproduction, especially because it demonstrates why kernel wins must be audited at serving level before defaulting the backend.",
-      "citations": [{"label": "Merged PR, kernel matrix, serving audit, and accuracy analysis", "url": "https://github.com/flashinfer-ai/flashinfer/pull/4535"}],
+      "citations": [
+        {
+          "label": "Merged PR, kernel matrix, serving audit, and accuracy analysis",
+          "url": "https://github.com/flashinfer-ai/flashinfer/pull/4535"
+        }
+      ],
       "content_hash": "flashinfer-pr-4535-merged-native-kda-blackwell"
+    },
+    {
+      "canonical_url": "https://github.com/flashinfer-ai/flashinfer/pull/4612",
+      "title": "FlashInfer: Zero-copy CuTe DSL block-sparse attention for SM100",
+      "venue_source": "FlashInfer pull request #4612 · merged",
+      "date": "2026-08-31",
+      "tag": "Blackwell · Sparse attention",
+      "one_sentence_takeaway": "Replacing FlashInfer’s SM100 block-64 C++/CUTLASS path with a CuTe DSL kernel and removing an unnecessary layout copy reports 2.36–3.12× kernel speedups on B200, plus 41% lower peak memory at 65K sequence length.",
+      "problem": "The older block-sparse attention path was slower at tested short sequences and forced a physical BHSD input copy for long sequences, adding latency and a large temporary allocation.",
+      "why_it_matters": "Block-sparse long-context attention is useful only if metadata, layout conversion, split-KV workspace, and dispatch overhead do not erase the skipped attention work or consume the saved memory.",
+      "existing_approaches": "A C++/CUTLASS SM100 block-64 kernel handled the operation. Early CuTe DSL revisions still copied transposed Q/K/V inputs and had split-KV planning that could add combine overhead on single-row shapes.",
+      "limitations": "Results are B200 kernel microbenchmarks, not model-level serving. Split-KV is slower in the published one-Q-block synthetic case, and the PR notes a pre-existing TFLOPS-reporting bug even though timings are unaffected.",
+      "proposed_solution": "Rewrite the block-64 kernel in CuTe DSL, accept zero-copy transposed BSHD views when the last dimension is contiguous, retain a contiguous output for TMA stores, and add explicit/automatic split-KV plus CLC scheduling controls.",
+      "key_differences": "The implementation co-designs planning, layout, and Blackwell TMA/TMEM execution in Python-level CuTe DSL rather than preserving a separate C++/CUTLASS kernel and an unconditional layout pre-pass.",
+      "results_with_conditions": "NVIDIA B200. For sequence lengths 1,024/2,048/4,096 at densities 25–75%, CuTe DSL median time is 0.026–0.083 ms versus C++ baseline 0.065–0.196 ms, or 2.36–3.12×. At Sq=Sk=65,536, kv_splits=1, density 1%/3%/5%: 1.920/2.158/2.532 ms baseline versus 0.634/0.828/1.254 ms zero-copy CuTe DSL (3.03/2.61/2.02×), with peak memory 2,472→1,448 MiB. In the one-Q-block split test, 1 split took 0.081 ms while 2–auto took about 0.177–0.180 ms.",
+      "assessment": "A substantial Blackwell sparse-attention rewrite with unusually useful negative evidence on split-KV. Worth deep reading and reproduction for long-context sparse workloads; model-level gains, compile latency, and multi-row scheduling remain open.",
+      "citations": [
+        {
+          "label": "Merged PR and B200 benchmark tables",
+          "url": "https://github.com/flashinfer-ai/flashinfer/pull/4612"
+        }
+      ],
+      "content_hash": "flashinfer-pr-4612-merged-sm100-blk64-cute-zero-copy"
     },
     {
       "canonical_url": "https://github.com/ggml-org/llama.cpp/pull/25635",
@@ -96,8 +185,105 @@
       "key_differences": "The kernel removes padding on aligned tiles instead of using padding as the primary conflict workaround, while preserving a compile-time fallback for all other layouts.",
       "results_with_conditions": "65,536-token context. DGX Spark: across Gemma-4-26B and Qwen3.6 27B/35B variants, pp2048 improved 1.13–2.61% and tg128 2.89–6.44%. RTX PRO 6000 Blackwell: pp2048 changed +2.11% to +7.36%; tg128 ranged from -0.70% to +2.21%. The largest reported prefill gain was Qwen3.6-27B-Q4_K_M, 1,518.74→1,630.54 tok/s (+7.36%).",
       "assessment": "A clean, architecture-aware memory-layout optimization with broad long-context relevance. Gains are modest but credible and workload dependent; worth backporting after checking the exact head dimensions and ensuring local accuracy/performance tests cover both swizzled and fallback paths.",
-      "citations": [{"label": "Merged PR, implementation, and benchmark tables", "url": "https://github.com/ggml-org/llama.cpp/pull/25635"}],
+      "citations": [
+        {
+          "label": "Merged PR, implementation, and benchmark tables",
+          "url": "https://github.com/ggml-org/llama.cpp/pull/25635"
+        }
+      ],
       "content_hash": "llamacpp-pr-25635-merged-xor-swizzle-fa-kv"
+    },
+    {
+      "canonical_url": "https://github.com/sgl-project/sglang/pull/33722",
+      "title": "SGLang: Fused-accept state advance for FlashInfer KDA MTP verification",
+      "venue_source": "SGLang pull request #33722 · merged",
+      "date": "2026-08-31",
+      "tag": "Speculative · Recurrent state",
+      "one_sentence_takeaway": "Keeping accepted KDA checkpoints in speculative scratch removes the all-layer SSM commit scatter and cuts the measured verify-plus-commit seam by 44.5–62.5% across batch sizes 1–16 on B200.",
+      "problem": "Each KDA MTP round wrote every draft token's post-state to scratch, scattered the accepted checkpoint back to the persistent pool across all KDA layers, then re-read it as the next round's seed.",
+      "why_it_matters": "For Kimi-Linear-48B shapes, one recurrent state is roughly 4 MB per layer per request. Rewriting it across 20 layers adds memory traffic, launches, and host dispatch precisely in the batch-size-one speculative inter-phase seam.",
+      "existing_approaches": "The legacy path performed a committed-pool seed copy plus a full all-layer SSM state scatter after every verify. FlashInfer already exposed num_accepted_tokens for in-kernel seeding, but SGLang did not pass it.",
+      "limitations": "The feature is off by default, requires the FlashInfer KDA backend and disabled radix cache, and is mutually exclusive with linear ReplaySSM speculation. The convolution rollback remains separate, and Kimi-K3 DSpark support is future work.",
+      "proposed_solution": "Index scratch by stable request slots, stage fresh requests once, persist per-slot acceptance lengths, and let recurrent_kda seed from the previous round's accepted scratch checkpoint; shrink commit to convolution rollback plus a tiny acceptance-length write.",
+      "key_differences": "The accepted state stays where the verify kernel produced it instead of round-tripping through persistent storage. Index construction is also hoisted and shared across layers while remaining CUDA-graph safe.",
+      "results_with_conditions": "NVIDIA B200, FlashInfer 0.6.14, Kimi-Linear-48B shapes, 20 KDA layers, HV=32, K=V=128, T=4, BF16 state; 20 verify calls captured in a CUDA graph, commit timed eagerly, minimum of 5×100 iterations. Legacy→fused: batch 1 393.4→218.5 µs (-44.5%), batch 4 720.8→312.3 µs (-56.7%), batch 16 1,967.8→737.8 µs (-62.5%). GPU parity was bit-exact for B=1/8/32 and T=4/6.",
+      "assessment": "A strong example of optimizing state ownership rather than only the recurrent kernel. The measured seam reduction is material, but production value depends on acceptance patterns and on the restrictive cache/backend gates. Worth deep reading for hybrid-model speculative serving.",
+      "citations": [
+        {
+          "label": "Merged PR, state-flow diagram, and timing table",
+          "url": "https://github.com/sgl-project/sglang/pull/33722"
+        }
+      ],
+      "content_hash": "sglang-pr-33722-merged-kda-fused-accept"
+    },
+    {
+      "canonical_url": "https://github.com/sgl-project/sglang/pull/35158",
+      "title": "SGLang: Byte-exact sizing and conservation checks for unified hybrid-model memory",
+      "venue_source": "SGLang pull request #35158 · merged",
+      "date": "2026-08-31",
+      "tag": "Memory management · Hybrid models",
+      "one_sentence_takeaway": "SGLang now sizes unified KV/state pools from the profiled byte budget, rejects impossible single-request configurations at boot, and checks allocator conservation before drift can become silent corruption.",
+      "problem": "Ratio-derived token counts could reconstruct less memory than profiling granted; an undersized pool could enter an unrecoverable retract loop; and shared-buffer watermark drift had no byte-conservation invariant.",
+      "why_it_matters": "Hybrid Mamba, GDN, SWA, MLA, and KV state compete inside one serving pool. Under-allocation wastes capacity, while incorrect free-space accounting can hang the server or admit requests into overlapping memory.",
+      "existing_approaches": "The unified pool re-summed page-aligned token counts and relied on token-identity checks at idle. Static pools were simpler, but those checks could not detect holes, pending compaction, or frontier overlap in a multi-ended byte buffer.",
+      "limitations": "This is correctness and capacity work, not a throughput optimization. Accuracy checks use 200-example few-shot GSM8K deltas rather than strict deterministic equivalence, and the patch is one layer of a larger stacked unified-memory series.",
+      "proposed_solution": "Thread the profiled byte budget directly into pool construction, floor-align it to 4 KiB, add a worst-case batch-one feasibility check before boot, and verify that live spans, holes, pending compaction, and ordered frontiers conserve the buffer.",
+      "key_differences": "Capacity is byte-denominated and allocator-owned rather than inferred again from token ratios; invalid configurations fail early with an itemized error, while idle invariant violations are reported without turning diagnostics into an availability incident.",
+      "results_with_conditions": "Same-arm memory change against the preceding stacked patch: gpt-oss-20b SWA +12.42 MB, Falcon-H1-7B Mamba +11.35 MB, Qwen3.5-9B GDN +0.36 MB, and Kimi-Linear-48B +4.5 KB. Few-shot GSM8K, n=200, across five dense/hybrid models showed median deltas of 0 to +1.25 points; no end-to-end throughput or latency change was reported in the primary source.",
+      "assessment": "High production value despite the absence of a speedup: it turns latent hangs and corruption into explicit invariants. Worth deep reading for hybrid-model memory managers; reproduce boot-floor edge cases and long-running fragmentation patterns.",
+      "citations": [
+        {
+          "label": "Merged PR, invariants, and validation",
+          "url": "https://github.com/sgl-project/sglang/pull/35158"
+        }
+      ],
+      "content_hash": "sglang-pr-35158-merged-unified-memory-byte-accounting"
+    },
+    {
+      "canonical_url": "https://github.com/vllm-project/vllm/pull/51705",
+      "title": "vLLM: ROCm AITER MLA DCP for causal multi-token verification",
+      "venue_source": "vLLM pull request #51705 · merged",
+      "date": "2026-08-31",
+      "tag": "ROCm · MLA · DCP",
+      "one_sentence_takeaway": "vLLM now gives every speculative verification token the correct rank-local causal KV window under ROCm MLA context parallelism and merges rank-local attention statistics through the existing DCP reduction.",
+      "problem": "Causal multi-token target verification needs a different KV boundary for every verification row and every DCP rank; committed-prefix-only metadata produces incorrect attention windows.",
+      "why_it_matters": "Without correct segmented metadata, Kimi-K3-style speculative serving cannot safely combine ROCm AITER MLA, decode context parallelism, FP8 KV, and full graph capture at long context.",
+      "existing_approaches": "Single-token decode stayed on Gluon/ASM, while multi-token verification lacked a DCP-aware segmented AITER path. Reusing one committed-prefix length for all rows is incorrect once tokens inside the verify block become causally visible.",
+      "limitations": "The change covers the ROCm AITER target backend. Hybrid prefix-cache geometry and external KV connectors remain separate, and the PR provides correctness/evaluation evidence rather than a throughput comparison against a non-DCP baseline.",
+      "proposed_solution": "Compute per-row global causal boundaries, map them to rank-local KV lengths, expand blocks into AITER subpages, run segmented MLA with unreduced partials, and convert/merge base-2 statistics into the existing BF16 output plus natural-log LSE DCP merge.",
+      "key_differences": "Routing ownership moves entirely into the metadata builder, with stable maximum-sized buffers for full graph capture and actual row lengths masking inactive segments during replay.",
+      "results_with_conditions": "Focused ROCm suite: 540 tests passed; an FP8 DCP=2, qlen=3, 96-head causal reference test found the old boundary calculation produced 2,671/147,456 elements outside tolerance, maximum absolute error 0.1311. Full Kimi-K3 target on TP8/DCP8, FP8 KV, 1M max length, batch 32, concurrency 64 completed 1,319 GSM8K samples in 335 s with strict match 0.9613 and no server, traceback, or HSA faults. A stacked two-draft-token run completed in 353 s with mean acceptance length 2.67–2.74.",
+      "assessment": "Important correctness and enablement work for advanced ROCm speculative stacks. Worth deep reading if operating MLA+DCP; performance value remains unquantified because the primary source does not include an end-to-end A/B against the prior execution mode.",
+      "citations": [
+        {
+          "label": "Merged PR, causal-row design, and full-model validation",
+          "url": "https://github.com/vllm-project/vllm/pull/51705"
+        }
+      ],
+      "content_hash": "vllm-pr-51705-merged-rocm-mla-dcp-verify"
+    },
+    {
+      "canonical_url": "https://github.com/vllm-project/vllm/pull/54261",
+      "title": "vLLM: Native CUDA Kimi-K3 AttnRes becomes the SM100 default",
+      "venue_source": "vLLM pull request #54261 · merged",
+      "date": "2026-08-31",
+      "tag": "Blackwell · Kimi-K3",
+      "one_sentence_takeaway": "A register/TMEM CUDA kernel now covers the full dense Kimi-K3 AttnRes contract on SM100, reporting 1.20–1.49× speedups over Triton for measured small batches and 1.72× at 8K tokens on B300.",
+      "problem": "Kimi-K3 AttnRes combines residual blocks, optional prefix and delta updates, normalization, and block-bank writes; incomplete native coverage left several common SM100 shapes on a more general Triton path.",
+      "why_it_matters": "AttnRes runs repeatedly inside Kimi-K3 decode and prefill. Microseconds saved at small decode batches reduce TPOT, while faster large-token execution improves prompt and verification throughput.",
+      "existing_approaches": "The Triton implementation supported the full operation contract and served as the fallback. The earlier CUDA kernel covered only a narrower set of block counts and fused variants.",
+      "limitations": "The default route is limited to dense hidden-size-7168 inputs on SM100-family GPUs. The published performance table is kernel-level; full-model evaluation establishes accuracy but does not isolate end-to-end throughput gain.",
+      "proposed_solution": "Extend the register/TMEM kernel to 0–8 block rows, optional prefix, output normalization, and block writes; specialize away unused normalization work and delay the programmatic-dependency wait until the first producer-dependent TMA.",
+      "key_differences": "The native path now covers the complete common contract and becomes the default on supported Blackwell shapes, while Triton remains an explicit fallback for unsupported devices or non-dense layouts.",
+      "results_with_conditions": "NVIDIA B300 SXM6 AC, PyTorch 2.13.0, CUDA 13.0, median kernel time. At one token: 1 block 10.24→8.19 µs (1.25×), 4 blocks 12.29→8.22 µs (1.49×), 8 blocks 14.34→10.24 µs (1.40×); zero blocks tied at 8.19 µs. At 8 blocks, 4,096 tokens 204.77→122.88 µs (1.67×) and 8,192 tokens 395.30→229.44 µs (1.72×). Full Kimi-K3 MXFP4 evaluation on GB300 reported no accuracy regression across five topologies/configurations.",
+      "assessment": "High-value, well-benchmarked Blackwell kernel work. Worth reproducing for Kimi-K3 deployments, but operators should measure model-level TPOT and throughput because the PR reports kernel speedups rather than a serving A/B.",
+      "citations": [
+        {
+          "label": "Merged PR, kernel benchmark, and model evaluation",
+          "url": "https://github.com/vllm-project/vllm/pull/54261"
+        }
+      ],
+      "content_hash": "vllm-pr-54261-merged-native-sm100-attnres"
     }
   ]
 }
