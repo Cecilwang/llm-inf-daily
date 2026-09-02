@@ -376,6 +376,70 @@
       "last_summarized": "2026-08-29",
       "content_hash": "vllm-amd-speculative-decoding-2026-08-23",
       "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/NVIDIA/TensorRT-LLM/pull/18091",
+      "title": "TensorRT-LLM: NVFP4 Compression for Cold KV-Cache Pages",
+      "first_seen": "2026-09-02",
+      "last_summarized": "2026-09-02",
+      "content_hash": "tensorrtllm-pr-18091-merged-nvfp4-cold-pages",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2608.30963",
+      "title": "A Universal Context-Reuse Layer for Cross-Model KV Sharing",
+      "first_seen": "2026-09-02",
+      "last_summarized": "2026-09-02",
+      "content_hash": "arxiv-2608.30963-v1",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2608.28911",
+      "title": "SemKV: Semantic Mixed-Precision KV Cache Quantization Guided by the Quality Cliff",
+      "first_seen": "2026-09-02",
+      "last_summarized": "2026-09-02",
+      "content_hash": "arxiv-2608.28911-v1",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/sgl-project/sglang/pull/36890",
+      "title": "SGLang: Unified Memory Meets Decode Context Parallelism for Kimi-Linear",
+      "first_seen": "2026-09-02",
+      "last_summarized": "2026-09-02",
+      "content_hash": "sglang-pr-36890-merged-unified-memory-dcp",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/vllm-project/vllm/pull/53576",
+      "title": "vLLM: FlashInfer PCIe IPC All-Reduce for NVLink-Free Multi-GPU Decode",
+      "first_seen": "2026-09-02",
+      "last_summarized": "2026-09-02",
+      "content_hash": "vllm-pr-53576-merged-flashinfer-pcie-ipc-allreduce",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2608.29748",
+      "title": "ReTrace: Rejected-Trajectory Conditioning for Speculative Decoding",
+      "first_seen": "2026-09-02",
+      "last_summarized": "2026-09-02",
+      "content_hash": "arxiv-2608.29748-v1",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/flashinfer-ai/flashinfer/pull/4646",
+      "title": "FlashInfer: cuTile Fused MoE Backend for BF16 and NVFP4",
+      "first_seen": "2026-09-02",
+      "last_summarized": "2026-09-02",
+      "content_hash": "flashinfer-pr-4646-merged-cutile-unified-moe",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/ggml-org/llama.cpp/pull/25952",
+      "title": "llama.cpp: Fuse Weighted Expert Reduction in CUDA MoE",
+      "first_seen": "2026-09-02",
+      "last_summarized": "2026-09-02",
+      "content_hash": "llamacpp-pr-25952-merged-fused-moe-reduction",
+      "status": "summarized"
     }
   ]
 }

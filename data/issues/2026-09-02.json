@@ -1,0 +1,174 @@
+{
+  "date": "2026-09-02",
+  "label": "02 Sep 2026",
+  "summary": [
+    "Cold-tier KV compression moved into a production runtime: TensorRT-LLM now stores evicted pages as NVFP4 while keeping active GPU KV unchanged, cutting the cold representation to roughly 28% of FP16/BF16 before alignment.",
+    "KV reuse is broadening in two directions: SemKV preserves every token with above-cliff mixed precision, while a learned translation layer reuses context across different model families and sizes.",
+    "SGLang composes unified memory with decode context parallelism for Kimi-Linear; its 2×H200 stress run moved 199,729 pages without errors and showed about 2% overhead versus static DCP2.",
+    "Decode collectives and MoE tails remain worthwhile targets: vLLM adds a PCIe-only FlashInfer IPC all-reduce path, and llama.cpp removes an intermediate global-memory round trip from expert reduction.",
+    "Portable kernels are improving but still shape-sensitive: FlashInfer's cuTile MoE backend wins many small-token cases yet trails CUTLASS on several large-token Nemotron shapes.",
+    "ReTrace reuses rejected draft trajectories across speculative-decoding rounds, improving macro-average acceptance length by 6.97% and end-to-end speedup by 5.34% over DFlash in the reported Qwen3 study."
+  ],
+  "items": [
+    {
+      "canonical_url": "https://github.com/NVIDIA/TensorRT-LLM/pull/18091",
+      "title": "TensorRT-LLM: NVFP4 Compression for Cold KV-Cache Pages",
+      "venue_source": "TensorRT-LLM pull request #18091 · merged",
+      "date": "2026-09-01",
+      "tag": "KV Cache · TensorRT-LLM",
+      "one_sentence_takeaway": "TensorRT-LLM can now quantize KV pages only when they leave the active GPU tier, fusing NVFP4 conversion with host transfer and preserving lossless side buffers.",
+      "problem": "Hierarchical KV-cache managers reduce HBM pressure by moving cold pages to host or disk, but storing those pages in FP16/BF16/FP8 consumes capacity and transfer bandwidth; compressing active attention KV would also require attention-kernel changes.",
+      "why_it_matters": "Long-context and multi-request serving are often limited by the size and movement cost of inactive KV state. A compact cold representation increases effective host/disk capacity and reduces bytes moved without perturbing the active GPU attention path.",
+      "existing_approaches": "TensorRT-LLM already supported a TriAttention compression method and a generic KVCM V2 cold-page codec interface. Conventional KV quantization usually changes the active cache format or relies on separate conversion and transfer steps.",
+      "limitations": "The feature is opt-in, requires the C++ KVCM V2 path and SM100-family hardware, rejects HELIX and unsupported speculative modes, and defaults global scales to 1 when no compatible ModelOpt checkpoint is supplied. The primary source reports correctness coverage but no end-to-end throughput, TTFT, or transfer-bandwidth benchmark.",
+      "proposed_solution": "Keep active GPU KV in FP16, BF16, or FP8; when pages migrate, pack values as E2M1 with one E4M3 block scale per 16 values and fuse conversion with GPU-to-mapped-host transfer. MHA/GQA and key-only MLA layouts are descriptor-driven, while index keys and other side buffers remain lossless.",
+      "key_differences": "Compression is confined to the cold representation, host and disk share the same opaque compact record, draft and target caches receive isolated codec state, and algorithm-specific layout/dispatch remains in Python behind one generic native bridge.",
+      "results_with_conditions": "Packed NVFP4 plus block scales uses 0.5625 byte/value before alignment: about 3.56× smaller than FP16/BF16 and 1.78× smaller than FP8. The PR reports B200 CUDA coverage for FP16/BF16/FP8 round trips, MHA/GQA, key-only MLA, page batching, lossless side buffers, host/disk tiers, and one-model MTP-EAGLE/EAGLE3. No serving performance number is reported.",
+      "assessment": "High production value: it inserts compression at the tier boundary with limited disturbance to attention execution. The missing result is whether reduced transfer volume outweighs quantize/dequantize cost under real eviction rates and disk/host bandwidth. Worth deep reading and reproduction on B200-class hierarchical-cache deployments.",
+      "citations": [
+        {"label": "Merged PR, layout, configuration, and tests", "url": "https://github.com/NVIDIA/TensorRT-LLM/pull/18091"}
+      ],
+      "content_hash": "tensorrtllm-pr-18091-merged-nvfp4-cold-pages"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2608.30963",
+      "title": "A Universal Context-Reuse Layer for Cross-Model KV Sharing",
+      "venue_source": "arXiv:2608.30963 v1 · submitted",
+      "date": "2026-08-31",
+      "tag": "KV Reuse · Paper",
+      "one_sentence_takeaway": "A learned translation layer turns one model's KV state into a cache consumable by a different model, reducing repeated prefill across changes in size, tokenizer, attention layout, and model family.",
+      "problem": "Prefix caches are normally model-specific, so routing or multi-agent systems repeat the same prefill whenever a different model consumes an already processed context.",
+      "why_it_matters": "Repeated long-context prefill adds TTFT, GPU compute, and memory traffic precisely in heterogeneous serving systems that route work across model sizes or specializations.",
+      "existing_approaches": "CacheBlend and KVCOMM reuse altered context within one model; SwiftCache moves model-bound caches across hardware; DroidSpeak and prior translators address aligned variants or narrower model-pair settings.",
+      "limitations": "The transport module must be trained for the source-target pair, accuracy drops with longer contexts in the within-family experiment, and the paper does not report the evaluation hardware. Handoff timings exclude source prefill and should only be interpreted when the source cache already exists.",
+      "proposed_solution": "Learn a universal context-reuse layer that maps source KV representations into target-model KV space, then copy and assemble the translated cache for target decoding.",
+      "key_differences": "The abstraction targets representation conversion rather than cache placement and spans models that differ in scale, architecture, attention configuration, tokenizer, and family.",
+      "results_with_conditions": "Qwen2.5-7B→1.5B on 116 LongBench2 samples: target accuracy rises from 27.59% to 34.48%; handoff takes 34.5 ms at 8K–16K and 53.8 ms at 16K–32K versus native 1.5B prefill at 158.7 and 288.3 ms. Qwen2.5-1.5B→Gemma-2-2B cuts incremental latency 67.04% at 4K (59.897 vs 181.706 ms). Llama3.1-70B→Qwen2.5-7B reports 44.0% accuracy and 138 ms handoff versus 45.7% and 899 ms native target inference. Hardware is not reported in the primary source.",
+      "assessment": "A strong systems abstraction for cascades and agents, with more convincing latency context than most KV-reuse papers. Pair-specific training, unexplained runtime overhead, and long-context fidelity are the main risks. Worth deep reading; reproduction should isolate translation, transfer, assembly, and synchronization on production hardware.",
+      "citations": [
+        {"label": "Paper and benchmark tables", "url": "https://arxiv.org/abs/2608.30963"}
+      ],
+      "content_hash": "arxiv-2608.30963-v1"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2608.28911",
+      "title": "SemKV: Semantic Mixed-Precision KV Cache Quantization Guided by the Quality Cliff",
+      "venue_source": "arXiv:2608.28911 v1 · submitted",
+      "date": "2026-08-28",
+      "tag": "KV Quantization · Paper",
+      "one_sentence_takeaway": "SemKV measures the quantizer-specific quality cliff first, then mixes only adjacent above-cliff precisions across tokens to reach fractional storage points without deleting context.",
+      "problem": "Uniform KV quantization can collapse abruptly below a narrow precision boundary, while token pruning removes evidence and importance-aware schemes often choose bit widths without first locating that boundary.",
+      "why_it_matters": "Long-context batch capacity is determined by KV size, but compression is useful only if it preserves the evidence and generation stability needed by real multi-turn and retrieval workloads.",
+      "existing_approaches": "KIVI/KVQuant use uniform low precision; H2O/SnapKV-style methods evict tokens; MiKV, QAQ, ZipCache, and related work allocate precision or retention using specific importance signals.",
+      "limitations": "Quality evaluation uses fake quantization with FP16 compute; packed storage is validated separately and there is no fused inference kernel or latency/throughput result. The cliff depends on model, quantizer, evaluation protocol, and context composition and must be remeasured when those change.",
+      "proposed_solution": "Offline, sweep a fractional-level grid to locate a seed-consistent collapse boundary. At runtime, rank tokens with a model-internal signal, keep every token, and assign the top fraction the higher of two adjacent above-cliff precisions; generated tokens use deferred block-wise allocation.",
+      "key_differences": "SemKV treats mixed precision as interpolation between safe grid points, not as permission to cross the cliff, and separates token-axis allocation from the base quantizer so it can compose with TurboQuant-MSE.",
+      "results_with_conditions": "Llama-3.1-8B-Instruct on sampled LongBench (n=900, three seeds): affine quantization is statistically indistinguishable from FP16 down to 2.322 code bits/value and collapses at 2.0; a 2.39-code-bit mixture measures 6.0× storage reduction including metadata with no detectable quality difference. TurboQuant-MSE moves the operating point to 2.025 effective bits/value and 7.9×. FP16 pruning at a 1.5× larger memory budget scores 0.065–0.149 versus SemKV 0.438 in the controlled comparison. GPU model and serving latency are not reported.",
+      "assessment": "The quality-cliff framing is valuable and the statistical protocol is stronger than a single average score. It is not yet a production performance result: fake quantization, packing, token scoring, and heterogeneous attention kernels must be integrated and timed. Worth deep reading; reproduce the cliff on the exact model/quantizer/workload before deployment.",
+      "citations": [
+        {"label": "Paper, method, and statistical results", "url": "https://arxiv.org/abs/2608.28911"}
+      ],
+      "content_hash": "arxiv-2608.28911-v1"
+    },
+    {
+      "canonical_url": "https://github.com/sgl-project/sglang/pull/36890",
+      "title": "SGLang: Unified Memory Meets Decode Context Parallelism for Kimi-Linear",
+      "venue_source": "SGLang pull request #36890 · merged",
+      "date": "2026-09-01",
+      "tag": "Memory · SGLang",
+      "one_sentence_takeaway": "SGLang now composes its unified hybrid-model memory pool with decode context parallelism by separating widened virtual IDs from physical page rows and adding an ownership-aware write translation.",
+      "problem": "Unified memory and DCP both rewrite KV locations: DCP widens the logical ID space across ranks, while the unified pool maps virtual pages to physical pages and dense per-layer views. Their previous combination was rejected.",
+      "why_it_matters": "Kimi-Linear-style hybrid models need both memory pooling and context-parallel decode to serve long contexts efficiently; a wrong mapping can write another rank's rows, corrupt compaction, or index beyond the page table.",
+      "existing_approaches": "The previous guard required dcp_size=1. DCP-aware index kernels already collapsed logical IDs for reads, but the allocator and unified write path did not expose separate virtual and physical page sizes.",
+      "limitations": "Support is restricted to the tested Kimi-Linear/MLA hybrid path with FlashInfer on Hopper. MHA unified pools, hybrid SWA, and TRT-LLM/CuTeDSL/TokenSpeed MLA backends remain rejected because their masked-write or page-table composition is incomplete.",
+      "proposed_solution": "Keep a DCP-widened virtual page size for schedulers while tracking the physical rows per page separately; resolve ownership and collapse IDs before translating writes, send unowned rows to a reserved padding sink, and reorder FlashInfer MLA decode sharding before unified translation.",
+      "key_differences": "Reads continue to use the already collapsed ID contract, while the one still-widened write location receives a dedicated translation hook. Page IDs and byte budgets remain invariant, so DCP increases logical capacity without inventing physical rows.",
+      "results_with_conditions": "Kimi-Linear-48B-A3B-Instruct, 2×H200, TP2, DCP2, FlashInfer attention: GSM8K 5-shot @400 scored 0.912 for unified+DCP2 versus 0.910 for static+DCP2 on the rebased tree. A forced-compaction run (400 prompts, 8K input/1K output, concurrency 200, mem fraction 0.40) moved 199,729 full-pool pages with zero errors. Unified+DCP2 delivered 2,684.7 output tok/s, 14.74 ms mean TPOT, and 105.0 s duration versus static+DCP2 at 2,734.7 tok/s, 14.38 ms, and 103.1 s—about 2% slower.",
+      "assessment": "High-value correctness and enablement work with unusually good stress coverage. It does not claim a speedup; the contribution is safe composition at modest overhead. Worth deep reading for hybrid-cache and DCP implementers, with follow-up needed on other MLA backends and larger DCP topologies.",
+      "citations": [
+        {"label": "Merged PR, mapping contract, stress test, and benchmarks", "url": "https://github.com/sgl-project/sglang/pull/36890"}
+      ],
+      "content_hash": "sglang-pr-36890-merged-unified-memory-dcp"
+    },
+    {
+      "canonical_url": "https://github.com/vllm-project/vllm/pull/53576",
+      "title": "vLLM: FlashInfer PCIe IPC All-Reduce for NVLink-Free Multi-GPU Decode",
+      "venue_source": "vLLM pull request #53576 · merged",
+      "date": "2026-09-01",
+      "tag": "Collectives · vLLM",
+      "one_sentence_takeaway": "vLLM adds an opt-in FlashInfer symmetric-memory IPC all-reduce backend for small decode collectives on PCIe-only multi-GPU systems.",
+      "problem": "On multi-GPU workstations without NVLink, NCCL RING_LL can dominate small tensor-parallel all-reduces during decode.",
+      "why_it_matters": "Small-message collective latency appears every decode step and can erase the compute benefit of tensor parallelism on RTX-class PCIe servers.",
+      "existing_approaches": "vLLM already offered NCCL, its custom all-reduce, and other symmetric-memory paths. A separate hierarchical all-reduce targets island topology, while max-size tuning changes an orthogonal dispatch threshold.",
+      "limitations": "The backend is off by default, requires a supported single-node FlashInfer IPC buffer and symmetric rank behavior during graph capture, and falls back when allocation or shape support is unavailable. The PR reports no latency or throughput comparison against NCCL.",
+      "proposed_solution": "Select FlashInfer's single-node IPC symmetric-memory implementation with an environment flag, prepare every CUDA-graph capture bucket on all ranks, keep autotune windows rank-symmetric, and integrate buffer registration/freeing with communicator lifecycle.",
+      "key_differences": "The path is specifically aimed at PCIe-only single-node systems and fails safely back to existing vLLM collectives; it does not change default NCCL behavior.",
+      "results_with_conditions": "Eight focused tests passed. End-to-end bring-up, CUDA-graph capture, and generation passed on 4×RTX PRO 6000 (SM120), DeepSeek-V4-Flash-0731, TP4 with DSpark. No all-reduce microbenchmark, TPOT, throughput, message-size sweep, or NCCL baseline is reported in the primary source.",
+      "assessment": "Practical enabling work for an increasingly common workstation topology, but performance value is unproven in the PR. Worth reproducing with small-message latency and end-to-end decode sweeps before enabling; graph-capture symmetry and fallback observability deserve particular attention.",
+      "citations": [
+        {"label": "Merged PR and validation setup", "url": "https://github.com/vllm-project/vllm/pull/53576"}
+      ],
+      "content_hash": "vllm-pr-53576-merged-flashinfer-pcie-ipc-allreduce"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2608.29748",
+      "title": "ReTrace: Rejected-Trajectory Conditioning for Speculative Decoding",
+      "venue_source": "arXiv:2608.29748 v1 · submitted",
+      "date": "2026-08-30",
+      "tag": "Speculative Decoding · Paper",
+      "one_sentence_takeaway": "ReTrace feeds the previous round's rejected draft suffix back into the next block, recovering useful hidden-state information without committing rejected tokens or adding a target forward pass.",
+      "problem": "Prefix verification stops at the first rejected token and discards the rest of the draft suffix, even though later hidden states may still align with the target continuation.",
+      "why_it_matters": "Draft and verification work spent beyond the first rejection becomes stranded compute; reusing it can raise accepted tokens per target step without changing the target distribution.",
+      "existing_approaches": "DFlash generates a parallel block from mask placeholders, while EAGLE-3 uses feature-level tree drafting. Within-round drafting improvements do not carry rejected trajectory information into the next proposal round.",
+      "limitations": "ReTrace is trained on top of DFlash and used 32 A800 40GB GPUs for training. Main evaluation is one request at a time; concurrent gains shrink as batching rises, and the method adds model/training complexity plus a small correction/fusion cost.",
+      "proposed_solution": "Retain rejected-suffix hidden states, align them to the next draft block, apply target-aware correction from the existing verification pass, and inject them through gated residual fusion; states are detached between rounds and rejected tokens are never committed.",
+      "key_differences": "Conditioning operates across rounds and leaves target-side verification unchanged, so it remains lossless and largely orthogonal to within-block drafting improvements.",
+      "results_with_conditions": "Qwen3-4B/8B across GSM8K, MATH-500, AIME25, HumanEval, LiveCodeBench, MT-Bench, and Alpaca: versus DFlash, macro-average acceptance length improves 6.97% and macro-average end-to-end speedup 5.34% across two models and greedy/stochastic decoding. On one A800, Qwen3-4B, batch 1, context 1,024, block 16, GSM8K greedy, speedup rises 3.37×→3.73× and accepted length 6.36→7.36 at 0.13 ms correction/fusion cost per cycle. In SGLang BF16 concurrency sweeps on one A800, ReTrace remains ahead of DFlash through the reported levels but both lose speedup as concurrency increases.",
+      "assessment": "A credible incremental improvement with unusually complete acceptance, timing, and concurrency context. Training cost and saturation under continuous batching limit immediate universality. Worth deep reading and reproduction for DFlash-based serving; measure TPOT and throughput at the target concurrency, not only batch-1 acceptance.",
+      "citations": [
+        {"label": "Paper, runtime table, and concurrent-serving appendix", "url": "https://arxiv.org/abs/2608.29748"}
+      ],
+      "content_hash": "arxiv-2608.29748-v1"
+    },
+    {
+      "canonical_url": "https://github.com/flashinfer-ai/flashinfer/pull/4646",
+      "title": "FlashInfer: cuTile Fused MoE Backend for BF16 and NVFP4",
+      "venue_source": "FlashInfer pull request #4646 · merged",
+      "date": "2026-09-01",
+      "tag": "MoE Kernels · FlashInfer",
+      "one_sentence_takeaway": "FlashInfer adds a portable cuTile backend to Unified MoE with BF16 across SM89/90/120/121 and NVFP4 W4A4 on SM120/121, backed by shape-aware autotuning.",
+      "problem": "Fused MoE kernels must cover different architectures, activation functions, precisions, expert counts, top-k values, and token regimes; hand-tuned CUTLASS paths are performant but harder to extend and debug.",
+      "why_it_matters": "A portable kernel path can reduce backend maintenance and accelerate support for new GPUs and quantized MoE models, provided it remains competitive across decode and prefill shapes.",
+      "existing_approaches": "FlashInfer's Unified MoE uses CUTLASS fused kernels as the main comparison. Generic implementations are easier to maintain but often lose on architecture- and shape-specific scheduling.",
+      "limitations": "Performance is mixed: cuTile frequently wins small-token cases but regresses on several large-token Nemotron and NVFP4 shapes. NVFP4 support is limited to SM120/121, and the PR presents kernel timing rather than end-to-end serving results.",
+      "proposed_solution": "Implement cuTile BF16/NVFP4 fused MoE with SwiGLU/ReLU², weight preparation and quantization, workspace management, CUDA-graph support, architecture/shape heuristics, and staged GEMM-pair autotuning behind the public Unified MoE API.",
+      "key_differences": "The backend prioritizes a Python/DSL development path and portability across GPU generations while retaining automatic tactic selection and an explicit CUTLASS fallback/benchmark comparison.",
+      "results_with_conditions": "CUDA-graph timing for full MoE calls, token counts 1–8,192. Qwen3.6-35B-A3B (H=2048, I=512, 256 experts, top-k 8): geomean cuTile/CUTLASS speedup is 1.032× BF16 and 0.996× NVFP4 on RTX PRO 6000 SM120; BF16 reaches 1.452× at one token on H100 but 0.823× at 8,192. Nemotron-3.5-Lightning-30B-A3B (H=2688, I=1856, 128 experts, top-k 6): geomeans are 0.976× BF16 and 0.951× NVFP4 on SM120, with large-token lows to 0.686×. L40S BF16 geomeans are 1.018× for Qwen and 0.984× for Nemotron.",
+      "assessment": "High engineering value as a portable second backend, and the transparent negative results are useful. It is not yet a universal CUTLASS replacement; dispatch policy must remain model/shape-specific. Worth deep reading for kernel developers and selective reproduction on the exact MoE/token distribution.",
+      "citations": [
+        {"label": "Merged PR, API scope, and full benchmark sweep", "url": "https://github.com/flashinfer-ai/flashinfer/pull/4646"}
+      ],
+      "content_hash": "flashinfer-pr-4646-merged-cutile-unified-moe"
+    },
+    {
+      "canonical_url": "https://github.com/ggml-org/llama.cpp/pull/25952",
+      "title": "llama.cpp: Fuse Weighted Expert Reduction in CUDA MoE",
+      "venue_source": "llama.cpp pull request #25952 · merged",
+      "date": "2026-09-01",
+      "tag": "MoE Kernels · llama.cpp",
+      "one_sentence_takeaway": "llama.cpp fuses router weighting and ordered expert reduction into one CUDA kernel, removing an intermediate global-memory write and one launch from the MoE combine tail.",
+      "problem": "The existing top-k MoE combine path writes weighted expert outputs to global memory and then launches a second kernel to reduce them.",
+      "why_it_matters": "The combine tail repeats across MoE layers, and intermediate traffic plus a second launch can become material in both consumer-GPU and compact multi-GPU inference.",
+      "existing_approaches": "The previous CUDA path generally used two physical fused kernels for top-k=8. Model-specific fusion could be faster but would fragment support across quantization and graph layouts.",
+      "limitations": "The runtime-k kernel supports k=2..15; k=16 and unsupported/unsafe graph patterns fall back. Results cover prefill on RTX 5090 and DGX Spark, not decode latency or server concurrency.",
+      "proposed_solution": "Pattern-match safe graph topology, strides, and views, keep inputs alive through allocator dependencies, recheck memory ranges, and perform weighting plus ordered reduction in one scratch-free kernel for scaled and unscaled graphs.",
+      "key_differences": "Matching is independent of model and quantization type; no scratch allocation or preservation copy is required, and an environment variable can disable the default-on fusion.",
+      "results_with_conditions": "Prefill tokens/s, same binary with fusion on versus off: RTX 5090 gains 3.6% on Qwen3.6-35B-A3B NVFP4 at pp2048/pp8192, 4.1%/3.9% with Q4_K_M, and 4.3% on Gemma-4-26B-A4B NVFP4. DGX Spark GB10 gains 5.4% on Qwen NVFP4 and 7.1%/6.2% on Gemma Q4_K_M. 13,178 backend-op tests and 42 CTests passed; WikiText-2 perplexity remained 5.8857±0.03661.",
+      "assessment": "A clean, measurable bandwidth/launch optimization with broad graph matching and strong correctness checks. Gains are modest but consistent for the tested prefill shapes. Worth reproducing for MoE-heavy local inference; decode and multi-request effects remain unreported.",
+      "citations": [
+        {"label": "Merged PR, implementation, benchmarks, and tests", "url": "https://github.com/ggml-org/llama.cpp/pull/25952"}
+      ],
+      "content_hash": "llamacpp-pr-25952-merged-fused-moe-reduction"
+    }
+  ]
+}
