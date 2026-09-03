@@ -440,6 +440,94 @@
       "last_summarized": "2026-09-02",
       "content_hash": "llamacpp-pr-25952-merged-fused-moe-reduction",
       "status": "summarized"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2609.00097",
+      "title": "Faster Than Flash: Exploiting Attention Sparsity for Efficient Long-Context Decoding",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "arxiv-2609.00097-v1",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2609.01338",
+      "title": "mzCache: On-Device LLM Memory Management under Multitasking",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "arxiv-2609.01338-v1",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2608.26575",
+      "title": "Benchmarking Confidential Computing Performance on NVIDIA Blackwell GPUs",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "arxiv-2608.26575-v2",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/vllm-project/vllm/pull/54517",
+      "title": "vLLM: Fuse Qwen3.8 Flash-Next PLE Kernels",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "vllm-pr-54517-merged-qwen-ple-fusion",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/sgl-project/sglang/pull/35546",
+      "title": "SGLang: Prune Unused EAGLE Draft-Extend Logits",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "sglang-pr-35546-merged-eagle-logit-row-pruning",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/ggml-org/llama.cpp/pull/27970",
+      "title": "llama.cpp: Model-Directed Sparse FlashAttention for DeepSeek-V4 and GLM",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "llamacpp-pr-27970-merged-sparse-fa-dsv4-glm",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/ggml-org/llama.cpp/pull/27449",
+      "title": "llama.cpp: Remove the IQ3_S Vulkan Register-Spill Cliff",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "llamacpp-pr-27449-merged-iq3s-vulkan-spill-fix",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/flashinfer-ai/flashinfer/pull/4795",
+      "title": "FlashInfer: Make NCCL Expert-Parallel Dispatch CUDA-Graph Capturable",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "flashinfer-pr-4795-merged-nccl-ep-cudagraph",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/NVIDIA/TensorRT-LLM/pull/15727",
+      "title": "TensorRT-LLM: Pipeline KV Transfer Behind Chunked Prefill",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "tensorrtllm-pr-15727-merged-pipelined-kv-transfer",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://arxiv.org/abs/2609.00049",
+      "title": "REAL-Q: E2E LLM Quantization via Dynamic Gradient Descent",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "arxiv-2609.00049-v1",
+      "status": "summarized"
+    },
+    {
+      "canonical_url": "https://github.com/vllm-project/vllm/pull/54565",
+      "title": "vLLM: Enable DSV3 GEMM for Strided Kimi-K3 Projections",
+      "first_seen": "2026-09-03",
+      "last_summarized": "2026-09-03",
+      "content_hash": "vllm-pr-54565-merged-strided-dsv3-gemm",
+      "status": "summarized"
     }
   ]
 }

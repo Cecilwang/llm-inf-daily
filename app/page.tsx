@@ -1,3 +1,4 @@
+import issue20260903 from "../data/issues/2026-09-03.json";
 import issue20260902 from "../data/issues/2026-09-02.json";
 import issue20260901 from "../data/issues/2026-09-01.json";
 import issue20260831 from "../data/issues/2026-08-31.json";
@@ -7,7 +8,7 @@ type Item={title:string;url:string;tag:string;source?:string;sourceDate?:string;
 type Issue={date:string;label:string;summary:string[];items:Item[]};
 type IssueRecord={date:string;label:string;summary:string[];items:Array<{canonical_url:string;title:string;venue_source:string;date:string;tag:string;one_sentence_takeaway:string;problem:string;why_it_matters:string;existing_approaches:string;limitations:string;proposed_solution:string;key_differences:string;results_with_conditions:string;assessment:string;citations:Citation[];content_hash:string}>};
 function issueFromRecord(issue:IssueRecord):Issue{return {date:issue.date,label:issue.label,summary:issue.summary,items:issue.items.map(item=>({title:item.title,url:item.canonical_url,tag:item.tag,source:item.venue_source,sourceDate:item.date,takeaway:item.one_sentence_takeaway,problem:item.problem,why:item.why_it_matters,existing:`${item.existing_approaches} Limitation: ${item.limitations}`,solution:`${item.proposed_solution} Key difference: ${item.key_differences}`,results:item.results_with_conditions,assessment:item.assessment,citations:item.citations}))}}
-const issues:Issue[]=[issueFromRecord(issue20260902 as IssueRecord),issueFromRecord(issue20260901 as IssueRecord),issueFromRecord(issue20260831 as IssueRecord),{date:"2026-08-30",label:"30 Aug 2026",summary:[
+const issues:Issue[]=[issueFromRecord(issue20260903 as IssueRecord),issueFromRecord(issue20260902 as IssueRecord),issueFromRecord(issue20260901 as IssueRecord),issueFromRecord(issue20260831 as IssueRecord),{date:"2026-08-30",label:"30 Aug 2026",summary:[
 "Fixed per-token MoE routing work is still material at decode batch sizes: vLLM removes eleven redundant GPU kernels per GPT-OSS MoE layer and reports a 5.6% throughput gain at concurrency 64.",
 "CUDA-graph coverage is becoming phase-aware: Megatron now uses logarithmic spacing for wide prefill ranges and linear spacing for tightly clustered decode batches.",
 "Inference portability moved on two fronts: llama.cpp improves Adreno prefill dispatch, while vLLM expands disaggregated MLA execution across DCP layouts.",
